@@ -50,6 +50,37 @@ Current local notes:
 - Android verification needs Android Studio/SDK.
 - Expo export/runtime checks require Node `>=20.19.4`; this repo records that requirement in `package.json`.
 
+## Testing Without Xcode
+
+You can still test early LearnHNS Mobile builds without installing Xcode on this machine.
+
+Best first path:
+
+1. Upgrade Node to `>=20.19.4`.
+2. Install Expo Go on a real iPhone or Android phone.
+3. Run:
+
+```sh
+npm run start
+```
+
+4. Scan the QR code with Expo Go.
+
+This is enough for early JavaScript/runtime checks, including the current public wallet-core derivation fixture, as long as the code only uses Expo Go-compatible JavaScript and native APIs.
+
+Limits of Expo Go:
+
+- It is not a final app-store build.
+- It cannot test custom native modules that require a development build.
+- It is not a substitute for final iOS/Android release QA.
+
+Later testing paths:
+
+- iOS simulator/local native builds require full Xcode on a Mac.
+- Android emulator/local native builds require Android Studio and Android SDK.
+- iOS/Android cloud builds can use EAS Build after Expo project setup, Apple Developer access, and Google Play setup.
+- TestFlight and Google Play internal testing are the right private beta channels after the wallet foundation is safer.
+
 ## Safety Rules
 
 - Do not use production seeds in early builds.
