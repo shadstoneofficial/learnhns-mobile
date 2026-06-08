@@ -81,6 +81,30 @@ Later testing paths:
 - iOS/Android cloud builds can use EAS Build after Expo project setup, Apple Developer access, and Google Play setup.
 - TestFlight and Google Play internal testing are the right private beta channels after the wallet foundation is safer.
 
+## Release Automation Direction
+
+Desktop apps can publish installable assets directly on GitHub Releases. Mobile is similar in spirit, but different in distribution.
+
+Recommended v1 path:
+
+- Use GitHub Actions for repeatable checks on every pull request.
+- Use Expo EAS Build for signed iOS and Android builds.
+- Use EAS Submit later to upload to Apple TestFlight and Google Play internal testing.
+- Keep GitHub Releases for release notes, checksums, and any non-store artifacts, not as the primary public mobile install path.
+
+Why:
+
+- iOS users normally install beta builds through TestFlight, not by downloading an `.ipa` from GitHub.
+- Android can technically distribute APKs directly, but Google Play internal/closed testing is safer for normal testers.
+- Apple and Google app-store credentials, signing keys, and service-account files must live in secure CI/app-store secret stores, never in the repo.
+
+Future CI/CD stages:
+
+1. `ci`: typecheck and wallet-core tests.
+2. `preview`: EAS internal builds for trusted testers.
+3. `beta`: submit to TestFlight and Google Play internal testing.
+4. `production`: submit for app-store review only after wallet safety, policy, and privacy gates pass.
+
 ## Safety Rules
 
 - Do not use production seeds in early builds.
