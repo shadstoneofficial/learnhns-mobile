@@ -27,8 +27,9 @@ The first real engineering gate is wallet-core feasibility:
 2. Done: confirm the same seed/path matches Bob/hsd-generated vectors.
 3. Done on Android/Expo Go: confirm the same derivation runs inside a mobile app runtime.
 4. In progress: create/restore wallet preview derives the first receive address in memory.
-5. Remaining: repeat on iOS/Expo Go when iOS testing is available.
-6. Only then add secure seed storage for test wallets.
+5. In progress: Android SecureStore spike can save/load/delete the current test mnemonic.
+6. Remaining: repeat on iOS/Expo Go when iOS testing is available.
+7. Only then add PIN, biometric unlock, backup confirmation, and real test-wallet custody.
 
 Run the current wallet-core check:
 
@@ -38,7 +39,7 @@ npm run test:wallet-core
 
 The test fixture uses the public BIP39 `abandon ... about` mnemonic. It is safe for open-source tests because it is public and must never be funded.
 
-The current app can also generate a test mnemonic with Expo Crypto and restore a pasted BIP39 mnemonic, but it intentionally does not persist seed phrases yet.
+The current app can also generate a test mnemonic with Expo Crypto, restore a pasted BIP39 mnemonic, and run a first Expo SecureStore save/load/delete spike. Treat this as test-only plumbing, not complete wallet custody.
 
 ## Local Setup
 

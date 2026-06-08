@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import * as Crypto from 'expo-crypto';
+import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
@@ -17,6 +18,7 @@ import { deriveReceiveAddress } from './src/wallet-core/deriveAddress';
 import { walletCoreTestVectors } from './src/wallet-core/testVectors';
 
 const publicTestMnemonic = walletCoreTestVectors[0].mnemonic;
+const storedTestWalletKey = 'learnhns.mobile.testWalletMnemonic.v1';
 
 type WalletPreview =
   | {
@@ -37,6 +39,10 @@ export default function App() {
   const [mnemonicInput, setMnemonicInput] = useState(publicTestMnemonic);
   const [walletPreview, setWalletPreview] = useState<WalletPreview>({ status: 'empty' });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isStorageBusy, setIsStorageBusy] = useState(false);
+  const [storageMessage, setStorageMessage] = useState(
+    'No seed has been saved in this session.'
+  );
 
   const wordCount = useMemo(() => {
     return normalizeMnemonic(mnemonicInput).split(' ').filter(Boolean).length;
@@ -73,6 +79,61 @@ export default function App() {
   function clearWallet() {
     setMnemonicInput('');
     setWalletPreview({ status: 'empty' });
+  }
+
+  async function saveTestWallet() {
+    const mnemonic = normalizeMnemonic(mnemonicInput);
+
+    try {
+      deriveReceiveAddress({ mnemonic });
+      setIsStorageBusy(true);
+      await SecureStore.setItemAsync(storedTestWalletKey, mnemonic);
+      setStorageMessage('Saved this test seed with Expo SecureStore.');
+    } catch (error) {
+      setStorageMessage(
+        error instanceof Error ? error.message : 'Unable to save this test seed.'
+      );
+    } finally {
+      setIsStorageBusy(false);
+    }
+  }
+
+  async function loadSavedTestWallet() {
+    setIsStorageBusy(true);
+
+    try {
+      const mnemonic = await SecureStore.getItemAsync(storedTestWalletKey);
+
+      if (!mnemonic) {
+        setStorageMessage('No saved test seed found on this device.');
+        return;
+      }
+
+      setMnemonicInput(mnemonic);
+      deriveWalletPreview(mnemonic);
+      setStorageMessage('Loaded saved test seed from SecureStore.');
+    } catch (error) {
+      setStorageMessage(
+        error instanceof Error ? error.message : 'Unable to load saved test seed.'
+      );
+    } finally {
+      setIsStorageBusy(false);
+    }
+  }
+
+  async function deleteSavedTestWallet() {
+    setIsStorageBusy(true);
+
+    try {
+      await SecureStore.deleteItemAsync(storedTestWalletKey);
+      setStorageMessage('Deleted saved test seed from SecureStore.');
+    } catch (error) {
+      setStorageMessage(
+        error instanceof Error ? error.message : 'Unable to delete saved test seed.'
+      );
+    } finally {
+      setIsStorageBusy(false);
+    }
   }
 
   function deriveWalletPreview(mnemonic: string) {
@@ -203,6 +264,62 @@ export default function App() {
             <Text style={styles.primaryButtonText}>Restore And Derive Address</Text>
           </Pressable>
         </View>
+
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelLabel}>M2 storage spike</Text>
+            <Text style={styles.panelTitle}>Save this test wallet</Text>
+          </View>
+          <Text style={styles.panelCopy}>
+            This proves Android secure storage plumbing only. PIN, biometric unlock,
+            backup confirmation, and real-wallet safety are still not complete.
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            disabled={isStorageBusy || !mnemonicInput.trim()}
+            onPress={saveTestWallet}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.buttonPressed,
+              (isStorageBusy || !mnemonicInput.trim()) && styles.buttonDisabled,
+            ]}
+          >
+            <Text style={styles.primaryButtonText}>Save Test Seed Locally</Text>
+          </Pressable>
+
+          <View style={styles.storageActions}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={isStorageBusy}
+              onPress={loadSavedTestWallet}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                styles.storageButton,
+                pressed && styles.buttonPressed,
+                isStorageBusy && styles.buttonDisabled,
+              ]}
+            >
+              <Text style={styles.secondaryButtonText}>Load Saved</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={isStorageBusy}
+              onPress={deleteSavedTestWallet}
+              style={({ pressed }) => [
+                styles.destructiveButton,
+                styles.storageButton,
+                pressed && styles.buttonPressed,
+                isStorageBusy && styles.buttonDisabled,
+              ]}
+            >
+              <Text style={styles.destructiveButtonText}>Delete Saved</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.storageMessage}>{storageMessage}</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -289,6 +406,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 27,
   },
+  panelCopy: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 20,
+  },
   actions: {
     gap: 10,
   },
@@ -317,6 +439,21 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: '#244b8f',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  destructiveButton: {
+    alignItems: 'center',
+    backgroundColor: '#fff1f2',
+    borderColor: '#fecdd3',
+    borderRadius: 8,
+    borderWidth: 1,
+    minHeight: 46,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  destructiveButtonText: {
+    color: '#9f1239',
     fontSize: 15,
     fontWeight: '800',
   },
@@ -404,5 +541,17 @@ const styles = StyleSheet.create({
     color: '#9f1239',
     fontSize: 14,
     lineHeight: 20,
+  },
+  storageActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  storageButton: {
+    flex: 1,
+  },
+  storageMessage: {
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 19,
   },
 });
