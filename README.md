@@ -26,8 +26,9 @@ The first real engineering gate is wallet-core feasibility:
 1. Done in Node/TypeScript: derive Handshake addresses from a public test seed.
 2. Done: confirm the same seed/path matches Bob/hsd-generated vectors.
 3. Done on Android/Expo Go: confirm the same derivation runs inside a mobile app runtime.
-4. Remaining: repeat on iOS/Expo Go.
-5. Only then add secure seed storage for test wallets.
+4. In progress: create/restore wallet preview derives the first receive address in memory.
+5. Remaining: repeat on iOS/Expo Go when iOS testing is available.
+6. Only then add secure seed storage for test wallets.
 
 Run the current wallet-core check:
 
@@ -36,6 +37,8 @@ npm run test:wallet-core
 ```
 
 The test fixture uses the public BIP39 `abandon ... about` mnemonic. It is safe for open-source tests because it is public and must never be funded.
+
+The current app can also generate a test mnemonic with Expo Crypto and restore a pasted BIP39 mnemonic, but it intentionally does not persist seed phrases yet.
 
 ## Local Setup
 
