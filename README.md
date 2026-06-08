@@ -25,8 +25,9 @@ The first real engineering gate is wallet-core feasibility:
 
 1. Done in Node/TypeScript: derive Handshake addresses from a public test seed.
 2. Done: confirm the same seed/path matches Bob/hsd-generated vectors.
-3. Remaining: confirm the same derivation runs inside iOS and Android app runtimes.
-4. Only then add secure seed storage for test wallets.
+3. Done on Android/Expo Go: confirm the same derivation runs inside a mobile app runtime.
+4. Remaining: repeat on iOS/Expo Go.
+5. Only then add secure seed storage for test wallets.
 
 Run the current wallet-core check:
 
@@ -45,7 +46,8 @@ npm run start
 
 Current local notes:
 
-- The scaffold installed with Node `v20.11.1`, but current Expo/React Native packages warn that newer Node 20 is preferred.
+- The first Android Expo Go smoke test passed on 2026-06-08 using Expo SDK 54 and tunnel mode.
+- Use ARM Node `>=20.19.4`; on this machine `/opt/homebrew/bin/node` is the known-good Node path.
 - Full iOS verification needs Xcode, not only Command Line Tools.
 - Android verification needs Android Studio/SDK.
 - Expo export/runtime checks require Node `>=20.19.4`; this repo records that requirement in `package.json`.
@@ -56,17 +58,17 @@ You can still test early LearnHNS Mobile builds without installing Xcode on this
 
 Best first path:
 
-1. Upgrade Node to `>=20.19.4`.
+1. Use Node `>=20.19.4`.
 2. Install Expo Go on a real iPhone or Android phone.
 3. Run:
 
 ```sh
-npm run start
+npm run start:tunnel
 ```
 
-4. Scan the QR code with Expo Go.
+4. Scan the QR code with Expo Go, or open the `exp://...exp.direct` URL shown in the terminal.
 
-This is enough for early JavaScript/runtime checks, including the current public wallet-core derivation fixture, as long as the code only uses Expo Go-compatible JavaScript and native APIs.
+Tunnel mode is slower than local LAN mode, but it avoids many phone/laptop networking issues. This is enough for early JavaScript/runtime checks, including the current public wallet-core derivation fixture, as long as the code only uses Expo Go-compatible JavaScript and native APIs.
 
 Limits of Expo Go:
 
