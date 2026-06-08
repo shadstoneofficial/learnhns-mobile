@@ -67,14 +67,36 @@ Known risk areas:
 
 The first real wallet-core task is to create a deterministic test vector.
 
+Initial test vectors have been generated from the public BIP39 test mnemonic:
+
+```txt
+abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+```
+
+This mnemonic is public and must never be funded.
+
+HSD/Bob-compatible receive-depth `0` vectors:
+
+```txt
+main:    m/44'/5353'/0'/0/0 -> hs1q5400uxwpr3w6ydc2wsc0hd9jfqz7nqkkgzfvmd
+testnet: m/44'/5354'/0'/0/0 -> ts1qg8dy6k7cqy6fvun5rzhjrfqj5gaqyuekpcgadk
+regtest: m/44'/5355'/0'/0/0 -> rs1q4rvs9pp9496qawp2zyqpz3s90fjfk362q92vq8
+```
+
+The repeatable local check is:
+
+```sh
+npm run test:wallet-core
+```
+
 Steps:
 
-1. Pick a test mnemonic with no funds.
-2. Use Bob or an HSD script to create/import that wallet.
-3. Record the first mainnet receive address at receive depth `0`.
-4. Record the first testnet/regtest receive address if useful.
-5. Implement the same derivation in `learnhns-mobile`.
-6. Confirm iOS and Android return the same address.
+1. Done: pick a public test mnemonic with no funds.
+2. Done: use HSD from Bob Wallet's dependency tree to derive receive depth `0`.
+3. Done: record mainnet, testnet, and regtest receive addresses.
+4. Done: implement the same derivation in `learnhns-mobile/src/wallet-core`.
+5. Remaining: confirm the check runs inside the mobile bundle/runtime, not only Node.
+6. Remaining: confirm iOS and Android return the same address.
 
 The expected output should be committed as a test fixture:
 

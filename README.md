@@ -23,10 +23,18 @@ This repo is a fresh Expo/React Native scaffold created from the v1 implementati
 
 The first real engineering gate is wallet-core feasibility:
 
-1. Derive a Handshake address from a known test seed.
-2. Confirm the same seed/path matches Bob/hsd.
-3. Confirm the derivation works on iOS and Android.
+1. Done in Node/TypeScript: derive Handshake addresses from a public test seed.
+2. Done: confirm the same seed/path matches Bob/hsd-generated vectors.
+3. Remaining: confirm the same derivation runs inside iOS and Android app runtimes.
 4. Only then add secure seed storage for test wallets.
+
+Run the current wallet-core check:
+
+```sh
+npm run test:wallet-core
+```
+
+The test fixture uses the public BIP39 `abandon ... about` mnemonic. It is safe for open-source tests because it is public and must never be funded.
 
 ## Local Setup
 
@@ -40,6 +48,7 @@ Current local notes:
 - The scaffold installed with Node `v20.11.1`, but current Expo/React Native packages warn that newer Node 20 is preferred.
 - Full iOS verification needs Xcode, not only Command Line Tools.
 - Android verification needs Android Studio/SDK.
+- Expo export/runtime checks require Node `>=20.19.4`; this repo records that requirement in `package.json`.
 
 ## Safety Rules
 

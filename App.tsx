@@ -1,5 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { deriveReceiveAddress } from './src/wallet-core/deriveAddress';
+import { walletCoreTestVectors } from './src/wallet-core/testVectors';
 
 const milestones = [
   'Create or restore a Bob-compatible Handshake wallet',
@@ -7,6 +9,14 @@ const milestones = [
   'Show HNS balance, receive QR, and send confirmation',
   'Show owned names, records, and renewal attention',
 ];
+
+const firstWalletVector = walletCoreTestVectors[0];
+const firstDerivedAddress = deriveReceiveAddress({
+  mnemonic: firstWalletVector.mnemonic,
+  network: firstWalletVector.network,
+  account: firstWalletVector.account,
+  receiveDepth: firstWalletVector.receiveDepth,
+});
 
 export default function App() {
   return (
@@ -29,6 +39,10 @@ export default function App() {
             Next gate: prove Bob/hsd-compatible seed and address derivation on
             iOS and Android before storing real wallet data.
           </Text>
+          <View style={styles.fixtureBox}>
+            <Text style={styles.fixtureLabel}>Public fixture check</Text>
+            <Text style={styles.fixtureAddress}>{firstDerivedAddress.address}</Text>
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -109,6 +123,27 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 15,
     lineHeight: 22,
+  },
+  fixtureBox: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+    marginTop: 6,
+    padding: 12,
+  },
+  fixtureLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  fixtureAddress: {
+    color: '#0f172a',
+    fontSize: 13,
+    lineHeight: 19,
   },
   section: {
     gap: 12,
