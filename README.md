@@ -52,6 +52,8 @@ The current app can also generate a test mnemonic with Expo Crypto, restore a pa
 
 Mock balance/domain data now flows through `src/helper-client`, which defines the typed boundary for replacing mocks with a real helper/indexer later.
 
+The draft helper contract is documented in `docs/helper-client-contract.md`.
+
 ## Local Setup
 
 ```sh

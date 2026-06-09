@@ -16,8 +16,8 @@ import {
 } from 'react-native';
 import { entropyToMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { getMockWalletSummary } from './src/helper-client/mockHelperClient';
-import type { OwnedNameSummary } from './src/helper-client/types';
+import { getMockWalletSummary, mockHelperClient } from './src/helper-client/mockHelperClient';
+import type { NameDetail, WalletSummary } from './src/helper-client/types';
 import { deriveReceiveAddress } from './src/wallet-core/deriveAddress';
 import { walletCoreTestVectors } from './src/wallet-core/testVectors';
 
@@ -26,7 +26,6 @@ const storedTestWalletKey = 'learnhns.mobile.testWalletMnemonic.v1';
 const storedPinKey = 'learnhns.mobile.testWalletPin.v1';
 const backupChallengeIndices = [2, 6, 10];
 const sections = ['Dashboard', 'Domains', 'Wallet', 'Backup', 'Storage', 'Security'] as const;
-const mockWalletState = getMockWalletSummary();
 
 type Section = (typeof sections)[number];
 type WalletFlow = 'main' | 'restore';
@@ -73,7 +72,10 @@ export default function App() {
   const [isCurrentWalletSaved, setIsCurrentWalletSaved] = useState(false);
   const [walletFlow, setWalletFlow] = useState<WalletFlow>('main');
   const [clipboardMessage, setClipboardMessage] = useState('Tap receive address to copy.');
-  const [selectedName, setSelectedName] = useState<OwnedNameSummary | null>(null);
+  const [walletSummary, setWalletSummary] = useState<WalletSummary>(getMockWalletSummary());
+  const [isRefreshingSummary, setIsRefreshingSummary] = useState(false);
+  const [helperMessage, setHelperMessage] = useState('Mock helper data loaded.');
+  const [selectedName, setSelectedName] = useState<NameDetail | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -346,6 +348,40 @@ export default function App() {
     setClipboardMessage('Receive address copied.');
   }
 
+  async function refreshWalletSummary() {
+    setIsRefreshingSummary(true);
+
+    try {
+      const receiveAddress = walletPreview.status === 'ready' ? walletPreview.address : '';
+      const summary = await mockHelperClient.getWalletSummary({
+        network: 'main',
+        receiveAddress,
+      });
+
+      setWalletSummary(summary);
+      setHelperMessage('Mock helper summary refreshed.');
+    } catch (error) {
+      setHelperMessage(
+        error instanceof Error ? error.message : 'Unable to refresh helper summary.'
+      );
+    } finally {
+      setIsRefreshingSummary(false);
+    }
+  }
+
+  async function openNameDetail(name: string) {
+    try {
+      const detail = await mockHelperClient.getNameDetail({
+        network: 'main',
+        name,
+      });
+
+      setSelectedName(detail);
+    } catch (error) {
+      setHelperMessage(error instanceof Error ? error.message : 'Unable to load name detail.');
+    }
+  }
+
   function deriveWalletPreview(mnemonic: string) {
     try {
       const result = deriveReceiveAddress({ mnemonic });
@@ -549,13 +585,19 @@ export default function App() {
 
             <View style={styles.dashboardMetric}>
               <Text style={styles.detailLabel}>Helper status</Text>
-              <Text style={styles.metricValue}>{mockWalletState.helperStatus.label}</Text>
-              <Text style={styles.nameMeta}>Mode: {mockWalletState.helperStatus.mode}</Text>
+              <Text style={styles.metricValue}>{walletSummary.helperStatus.label}</Text>
+              <Text style={styles.nameMeta}>
+                Mode: {walletSummary.helperStatus.mode} · Network:{' '}
+                {walletSummary.helperStatus.network}
+              </Text>
+              <Text style={styles.nameMeta}>
+                Updated: {new Date(walletSummary.helperStatus.updatedAt).toLocaleTimeString()}
+              </Text>
             </View>
 
             <View style={styles.dashboardMetric}>
               <Text style={styles.detailLabel}>Mock HNS balance</Text>
-              <Text style={styles.balanceValue}>{mockWalletState.balance}</Text>
+              <Text style={styles.balanceValue}>{walletSummary.balance}</Text>
             </View>
 
             {walletPreview.status === 'ready' && (
@@ -572,9 +614,27 @@ export default function App() {
 
             <View style={styles.dashboardMetric}>
               <Text style={styles.detailLabel}>Mock owned domains</Text>
-              <Text style={styles.metricValue}>{mockWalletState.names.length} domains</Text>
+              <Text style={styles.metricValue}>{walletSummary.names.length} domains</Text>
               <Text style={styles.nameMeta}>Open Domains to inspect records and actions.</Text>
             </View>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={isRefreshingSummary}
+              onPress={refreshWalletSummary}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                pressed && styles.buttonPressed,
+                isRefreshingSummary && styles.buttonDisabled,
+              ]}
+            >
+              {isRefreshingSummary ? (
+                <ActivityIndicator color="#244b8f" />
+              ) : (
+                <Text style={styles.secondaryButtonText}>Refresh Mock Helper</Text>
+              )}
+            </Pressable>
+            <Text style={styles.nameMeta}>{helperMessage}</Text>
 
             <Pressable
               accessibilityRole="button"
@@ -600,11 +660,11 @@ export default function App() {
                 </Text>
 
                 <View style={styles.namesList}>
-                  {mockWalletState.names.map((name) => (
+                  {walletSummary.names.map((name) => (
                     <Pressable
                       accessibilityRole="button"
                       key={name.name}
-                      onPress={() => setSelectedName(name)}
+                      onPress={() => openNameDetail(name.name)}
                       style={({ pressed }) => [styles.nameRow, pressed && styles.buttonPressed]}
                     >
                       <Text style={styles.nameText}>{name.name}</Text>
