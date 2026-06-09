@@ -18,6 +18,22 @@ Current methods:
 
 The mock implementation returns static data and refuses transaction relay.
 
+Run the local HTTP mock helper:
+
+```sh
+npm run mock-helper
+```
+
+Then enter this shape in the mobile Dashboard helper endpoint field:
+
+```txt
+http://YOUR-LAPTOP-LAN-IP:8787
+```
+
+The phone must be able to reach the laptop on that network. Expo tunnel exposes
+the app bundle, but it does not automatically expose arbitrary local helper
+ports.
+
 ## Expected Live Helper Shape
 
 Future helper APIs should map cleanly to these app calls:

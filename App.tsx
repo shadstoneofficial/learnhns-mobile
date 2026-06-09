@@ -17,6 +17,7 @@ import {
 import { entropyToMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { getMockWalletSummary, mockHelperClient } from './src/helper-client/mockHelperClient';
+import { createHttpHelperClient } from './src/helper-client/httpHelperClient';
 import type { NameDetail, WalletSummary } from './src/helper-client/types';
 import { deriveReceiveAddress } from './src/wallet-core/deriveAddress';
 import { walletCoreTestVectors } from './src/wallet-core/testVectors';
@@ -75,6 +76,8 @@ export default function App() {
   const [walletSummary, setWalletSummary] = useState<WalletSummary>(getMockWalletSummary());
   const [isRefreshingSummary, setIsRefreshingSummary] = useState(false);
   const [helperMessage, setHelperMessage] = useState('Mock helper data loaded.');
+  const [helperBaseUrl, setHelperBaseUrl] = useState('');
+  const [useHttpHelper, setUseHttpHelper] = useState(false);
   const [selectedName, setSelectedName] = useState<NameDetail | null>(null);
 
   useEffect(() => {
@@ -352,14 +355,17 @@ export default function App() {
     setIsRefreshingSummary(true);
 
     try {
+      const helperClient = getActiveHelperClient();
       const receiveAddress = walletPreview.status === 'ready' ? walletPreview.address : '';
-      const summary = await mockHelperClient.getWalletSummary({
+      const summary = await helperClient.getWalletSummary({
         network: 'main',
         receiveAddress,
       });
 
       setWalletSummary(summary);
-      setHelperMessage('Mock helper summary refreshed.');
+      setHelperMessage(
+        useHttpHelper ? 'HTTP helper summary refreshed.' : 'Mock helper summary refreshed.'
+      );
     } catch (error) {
       setHelperMessage(
         error instanceof Error ? error.message : 'Unable to refresh helper summary.'
@@ -371,7 +377,7 @@ export default function App() {
 
   async function openNameDetail(name: string) {
     try {
-      const detail = await mockHelperClient.getNameDetail({
+      const detail = await getActiveHelperClient().getNameDetail({
         network: 'main',
         name,
       });
@@ -380,6 +386,14 @@ export default function App() {
     } catch (error) {
       setHelperMessage(error instanceof Error ? error.message : 'Unable to load name detail.');
     }
+  }
+
+  function getActiveHelperClient() {
+    if (useHttpHelper && helperBaseUrl.trim()) {
+      return createHttpHelperClient(helperBaseUrl.trim());
+    }
+
+    return mockHelperClient;
   }
 
   function deriveWalletPreview(mnemonic: string) {
@@ -592,6 +606,34 @@ export default function App() {
               </Text>
               <Text style={styles.nameMeta}>
                 Updated: {new Date(walletSummary.helperStatus.updatedAt).toLocaleTimeString()}
+              </Text>
+            </View>
+
+            <View style={styles.dashboardMetric}>
+              <Text style={styles.detailLabel}>Helper endpoint</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                onChangeText={setHelperBaseUrl}
+                placeholder="http://YOUR-LAPTOP-IP:8787"
+                placeholderTextColor="#94a3b8"
+                style={styles.challengeInput}
+                value={helperBaseUrl}
+              />
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setUseHttpHelper((current) => !current)}
+                style={({ pressed }) => [
+                  useHttpHelper ? styles.confirmedButton : styles.secondaryButton,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text style={useHttpHelper ? styles.primaryButtonText : styles.secondaryButtonText}>
+                  {useHttpHelper ? 'Using HTTP Helper' : 'Use HTTP Helper'}
+                </Text>
+              </Pressable>
+              <Text style={styles.nameMeta}>
+                Enter a local mock helper URL, enable HTTP, then refresh.
               </Text>
             </View>
 

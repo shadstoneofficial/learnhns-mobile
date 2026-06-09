@@ -54,6 +54,12 @@ Mock balance/domain data now flows through `src/helper-client`, which defines th
 
 The draft helper contract is documented in `docs/helper-client-contract.md`.
 
+Run the local mock helper with:
+
+```sh
+npm run mock-helper
+```
+
 ## Local Setup
 
 ```sh

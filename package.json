@@ -32,6 +32,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "mock-helper": "tsx scripts/mock-helper-server.ts",
     "test:wallet-core": "tsx scripts/check-wallet-vector.ts"
   },
   "private": true
