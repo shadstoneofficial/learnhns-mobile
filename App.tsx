@@ -16,6 +16,8 @@ import {
 } from 'react-native';
 import { entropyToMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
+import { getMockWalletSummary } from './src/helper-client/mockHelperClient';
+import type { OwnedNameSummary } from './src/helper-client/types';
 import { deriveReceiveAddress } from './src/wallet-core/deriveAddress';
 import { walletCoreTestVectors } from './src/wallet-core/testVectors';
 
@@ -24,24 +26,7 @@ const storedTestWalletKey = 'learnhns.mobile.testWalletMnemonic.v1';
 const storedPinKey = 'learnhns.mobile.testWalletPin.v1';
 const backupChallengeIndices = [2, 6, 10];
 const sections = ['Dashboard', 'Domains', 'Wallet', 'Backup', 'Storage', 'Security'] as const;
-const mockWalletState = {
-  helperStatus: 'Mock helper online',
-  balance: '0.000000 HNS',
-  names: [
-    {
-      name: 'learnhns/',
-      status: 'Mock owned',
-      renewal: 'No live renewal data yet',
-      records: ['NS ns1.learnhns.com.', 'TXT "mobile dashboard mock"'],
-    },
-    {
-      name: 'mobiletest/',
-      status: 'Mock owned',
-      renewal: 'No live renewal data yet',
-      records: ['A 127.0.0.1', 'TXT "test wallet only"'],
-    },
-  ],
-};
+const mockWalletState = getMockWalletSummary();
 
 type Section = (typeof sections)[number];
 type WalletFlow = 'main' | 'restore';
@@ -88,9 +73,7 @@ export default function App() {
   const [isCurrentWalletSaved, setIsCurrentWalletSaved] = useState(false);
   const [walletFlow, setWalletFlow] = useState<WalletFlow>('main');
   const [clipboardMessage, setClipboardMessage] = useState('Tap receive address to copy.');
-  const [selectedName, setSelectedName] = useState<(typeof mockWalletState.names)[number] | null>(
-    null
-  );
+  const [selectedName, setSelectedName] = useState<OwnedNameSummary | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -566,7 +549,8 @@ export default function App() {
 
             <View style={styles.dashboardMetric}>
               <Text style={styles.detailLabel}>Helper status</Text>
-              <Text style={styles.metricValue}>{mockWalletState.helperStatus}</Text>
+              <Text style={styles.metricValue}>{mockWalletState.helperStatus.label}</Text>
+              <Text style={styles.nameMeta}>Mode: {mockWalletState.helperStatus.mode}</Text>
             </View>
 
             <View style={styles.dashboardMetric}>
@@ -705,9 +689,12 @@ export default function App() {
               {isCurrentWalletSaved && walletPreview.status === 'ready' && (
             <View style={styles.resultPanel}>
               <Text style={styles.panelLabel}>Current receive address</Text>
-              <Text selectable style={styles.addressText}>
-                {walletPreview.address}
-              </Text>
+              <Pressable accessibilityRole="button" onPress={copyReceiveAddress}>
+                <Text selectable style={styles.addressText}>
+                  {walletPreview.address}
+                </Text>
+              </Pressable>
+              <Text style={styles.nameMeta}>{clipboardMessage}</Text>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Path</Text>
                 <Text selectable style={styles.detailValue}>
@@ -723,9 +710,12 @@ export default function App() {
               {!isCurrentWalletSaved && walletPreview.status === 'ready' && (
             <View style={styles.resultPanel}>
               <Text style={styles.panelLabel}>Derived receive address</Text>
-              <Text selectable style={styles.addressText}>
-                {walletPreview.address}
-              </Text>
+              <Pressable accessibilityRole="button" onPress={copyReceiveAddress}>
+                <Text selectable style={styles.addressText}>
+                  {walletPreview.address}
+                </Text>
+              </Pressable>
+              <Text style={styles.nameMeta}>{clipboardMessage}</Text>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Path</Text>
                 <Text selectable style={styles.detailValue}>
@@ -825,9 +815,12 @@ export default function App() {
               {!isCurrentWalletSaved && walletPreview.status === 'ready' && (
                 <View style={styles.resultPanel}>
                   <Text style={styles.panelLabel}>Derived receive address</Text>
-                  <Text selectable style={styles.addressText}>
-                    {walletPreview.address}
-                  </Text>
+                  <Pressable accessibilityRole="button" onPress={copyReceiveAddress}>
+                    <Text selectable style={styles.addressText}>
+                      {walletPreview.address}
+                    </Text>
+                  </Pressable>
+                  <Text style={styles.nameMeta}>{clipboardMessage}</Text>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Path</Text>
                     <Text selectable style={styles.detailValue}>

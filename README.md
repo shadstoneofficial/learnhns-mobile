@@ -50,6 +50,8 @@ The test fixture uses the public BIP39 `abandon ... about` mnemonic. It is safe 
 
 The current app can also generate a test mnemonic with Expo Crypto, restore a pasted BIP39 mnemonic in a dedicated restore/create flow, confirm requested backup words, run a first Expo SecureStore save/load/delete spike, hide wallet test data behind a local PIN lock with biometric unlock where available, and show mocked read-only Dashboard/Domains screens. The Dashboard can copy the receive address. Domains lists mocked owned names and opens read-only domain detail/actions. After unlock, the app auto-loads the saved test wallet and makes it the primary Dashboard/Wallet state. Android restart persistence has been confirmed in Expo Go. Treat this as test-only plumbing, not complete wallet custody.
 
+Mock balance/domain data now flows through `src/helper-client`, which defines the typed boundary for replacing mocks with a real helper/indexer later.
+
 ## Local Setup
 
 ```sh
