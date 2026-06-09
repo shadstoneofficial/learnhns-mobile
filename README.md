@@ -35,7 +35,7 @@ The first real engineering gate is wallet-core feasibility:
 10. In progress: seed phrase entry is kept inside a dedicated restore/create flow, not the primary Wallet screen.
 11. In progress: Android biometric unlock is available on the locked screen when the device supports enrolled biometrics.
 12. In progress: read-only Dashboard scaffold shows mocked helper status, HNS balance, receive address, and owned names.
-13. In progress: receive address can be copied.
+13. In progress: dedicated Receive screen shows the current receive address, QR code, copy action, and native share action.
 14. In progress: dedicated Domains section lists mock owned names and opens read-only domain detail/actions.
 15. Remaining: repeat on iOS/Expo Go when iOS testing is available.
 16. Only then harden real test-wallet custody.
@@ -48,7 +48,7 @@ npm run test:wallet-core
 
 The test fixture uses the public BIP39 `abandon ... about` mnemonic. It is safe for open-source tests because it is public and must never be funded.
 
-The current app can also generate a test mnemonic with Expo Crypto, restore a pasted BIP39 mnemonic in a dedicated restore/create flow, confirm requested backup words, run a first Expo SecureStore save/load/delete spike, hide wallet test data behind a local PIN lock with biometric unlock where available, and show mocked read-only Dashboard/Domains screens. The Dashboard can copy the receive address. Domains lists mocked owned names and opens read-only domain detail/actions. After unlock, the app auto-loads the saved test wallet and makes it the primary Dashboard/Wallet state. Android restart persistence has been confirmed in Expo Go. Treat this as test-only plumbing, not complete wallet custody.
+The current app can also generate a test mnemonic with Expo Crypto, restore a pasted BIP39 mnemonic in a dedicated restore/create flow, confirm requested backup words, run a first Expo SecureStore save/load/delete spike, hide wallet test data behind a local PIN lock with biometric unlock where available, show mocked read-only Dashboard/Domains screens, and open a dedicated Receive screen with QR/copy/share. Domains lists mocked owned names and opens read-only domain detail/actions. After unlock, the app auto-loads the saved test wallet and makes it the primary Dashboard/Wallet state. Android restart persistence has been confirmed in Expo Go. Treat this as test-only plumbing, not complete wallet custody.
 
 Mock balance/domain data now flows through `src/helper-client`, which defines the typed boundary for replacing mocks with a real helper/indexer later.
 
@@ -59,6 +59,48 @@ Run the local mock helper with:
 ```sh
 npm run mock-helper
 ```
+
+## Android Expo Go + Mock Helper Test Path
+
+Use this path for early Android testing while the app is still pre-production.
+
+Terminal 1, start the local mock helper:
+
+```sh
+npm run mock-helper
+```
+
+The helper listens on port `8787`.
+
+Terminal 2, start Expo in tunnel mode:
+
+```sh
+npm run start:tunnel
+```
+
+On the Android phone:
+
+1. Open Expo Go.
+2. Scan the QR code or enter the `exp://...exp.direct` URL from the terminal.
+3. Unlock the app if a test PIN is set.
+4. Confirm the Dashboard loads.
+5. In Dashboard, enter the laptop LAN URL in Helper endpoint, for example:
+
+```txt
+http://YOUR-LAPTOP-LAN-IP:8787
+```
+
+6. Tap `Use HTTP Helper`.
+7. Tap `Refresh Mock Helper`.
+8. Confirm the helper status and mock wallet data refresh without exposing a seed or private key.
+9. Tap the Dashboard receive-address card to open Receive.
+10. Confirm the Receive screen shows the QR code, receive address, copy button, and share button.
+
+Notes:
+
+- Do not use `localhost` on the phone for the helper endpoint. On the phone, `localhost` means the phone itself, not the laptop.
+- The app remains test-wallet only. Do not fund production wallets or rely on balances until live helper data and custody hardening are complete.
+- If Expo Go shows a stale bundle or remote update error, force close Expo Go, clear the recent LearnHNS Mobile entry if needed, and reopen the current tunnel URL.
 
 ## Local Setup
 

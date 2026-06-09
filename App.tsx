@@ -9,11 +9,13 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { entropyToMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { getMockWalletSummary, mockHelperClient } from './src/helper-client/mockHelperClient';
@@ -26,7 +28,7 @@ const publicTestMnemonic = walletCoreTestVectors[0].mnemonic;
 const storedTestWalletKey = 'learnhns.mobile.testWalletMnemonic.v1';
 const storedPinKey = 'learnhns.mobile.testWalletPin.v1';
 const backupChallengeIndices = [2, 6, 10];
-const sections = ['Dashboard', 'Domains', 'Wallet', 'Backup', 'Storage', 'Security'] as const;
+const sections = ['Dashboard', 'Receive', 'Domains', 'Wallet', 'Backup', 'Storage', 'Security'] as const;
 
 type Section = (typeof sections)[number];
 type WalletFlow = 'main' | 'restore';
@@ -73,6 +75,7 @@ export default function App() {
   const [isCurrentWalletSaved, setIsCurrentWalletSaved] = useState(false);
   const [walletFlow, setWalletFlow] = useState<WalletFlow>('main');
   const [clipboardMessage, setClipboardMessage] = useState('Tap receive address to copy.');
+  const [receiveMessage, setReceiveMessage] = useState('Ready to receive test HNS.');
   const [walletSummary, setWalletSummary] = useState<WalletSummary>(getMockWalletSummary());
   const [isRefreshingSummary, setIsRefreshingSummary] = useState(false);
   const [helperMessage, setHelperMessage] = useState('Mock helper data loaded.');
@@ -344,11 +347,26 @@ export default function App() {
   async function copyReceiveAddress() {
     if (walletPreview.status !== 'ready') {
       setClipboardMessage('No receive address is loaded yet.');
+      setReceiveMessage('No receive address is loaded yet.');
       return;
     }
 
     await Clipboard.setStringAsync(walletPreview.address);
     setClipboardMessage('Receive address copied.');
+    setReceiveMessage('Receive address copied.');
+  }
+
+  async function shareReceiveAddress() {
+    if (walletPreview.status !== 'ready') {
+      setReceiveMessage('No receive address is loaded yet.');
+      return;
+    }
+
+    await Share.share({
+      message: walletPreview.address,
+      title: 'LearnHNS receive address',
+    });
+    setReceiveMessage('Share sheet opened.');
   }
 
   async function refreshWalletSummary() {
@@ -643,15 +661,17 @@ export default function App() {
             </View>
 
             {walletPreview.status === 'ready' && (
-              <View style={styles.dashboardMetric}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setActiveSection('Receive')}
+                style={({ pressed }) => [styles.dashboardMetric, pressed && styles.buttonPressed]}
+              >
                 <Text style={styles.detailLabel}>Receive address</Text>
-                <Pressable accessibilityRole="button" onPress={copyReceiveAddress}>
-                  <Text selectable style={styles.addressText}>
-                    {walletPreview.address}
-                  </Text>
-                </Pressable>
-                <Text style={styles.nameMeta}>{clipboardMessage}</Text>
-              </View>
+                <Text selectable style={styles.addressText}>
+                  {walletPreview.address}
+                </Text>
+                <Text style={styles.nameMeta}>Open Receive for QR, copy, and share.</Text>
+              </Pressable>
             )}
 
             <View style={styles.dashboardMetric}>
@@ -685,6 +705,81 @@ export default function App() {
             >
               <Text style={styles.secondaryButtonText}>View Domains</Text>
             </Pressable>
+          </View>
+        )}
+
+        {activeSection === 'Receive' && (
+          <View style={styles.panel}>
+            <View style={styles.panelHeader}>
+              <Text style={styles.panelLabel}>M4 receive</Text>
+              <Text style={styles.panelTitle}>Receive HNS</Text>
+            </View>
+            <Text style={styles.panelCopy}>
+              Share this address to receive HNS into the currently loaded test wallet.
+            </Text>
+
+            <View style={styles.warningPanel}>
+              <Text style={styles.warningLabel}>Test wallet only</Text>
+              <Text style={styles.warningText}>
+                This app is still pre-production. Use small test amounts only until
+                live balance tracking, transaction history, and wallet hardening are complete.
+              </Text>
+            </View>
+
+            {walletPreview.status === 'ready' ? (
+              <>
+                <View style={styles.qrPanel}>
+                  <QRCode
+                    backgroundColor="#ffffff"
+                    color="#0f172a"
+                    size={220}
+                    value={walletPreview.address}
+                  />
+                </View>
+
+                <View style={styles.dashboardMetric}>
+                  <Text style={styles.detailLabel}>Receive address</Text>
+                  <Text selectable style={styles.receiveAddressText}>
+                    {walletPreview.address}
+                  </Text>
+                </View>
+
+                <View style={styles.storageActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={copyReceiveAddress}
+                    style={({ pressed }) => [
+                      styles.primaryButton,
+                      styles.storageButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.primaryButtonText}>Copy Address</Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={shareReceiveAddress}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      styles.storageButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Share</Text>
+                  </Pressable>
+                </View>
+
+                <Text style={styles.storageMessage}>{receiveMessage}</Text>
+              </>
+            ) : (
+              <View style={styles.errorPanel}>
+                <Text style={styles.errorTitle}>No wallet loaded</Text>
+                <Text style={styles.errorText}>
+                  Create, restore, or unlock a saved test wallet before receiving HNS.
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -1403,6 +1498,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
   },
+  qrPanel: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#d8e2f3',
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 18,
+  },
   namesList: {
     gap: 8,
   },
@@ -1446,6 +1549,11 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontSize: 15,
     lineHeight: 22,
+  },
+  receiveAddressText: {
+    color: '#0f172a',
+    fontSize: 16,
+    lineHeight: 24,
   },
   detailRow: {
     gap: 4,
