@@ -34,8 +34,11 @@ The first real engineering gate is wallet-core feasibility:
 9. In progress: saved-wallet state is primary on the Wallet screen; create/restore is secondary after a wallet exists.
 10. In progress: seed phrase entry is kept inside a dedicated restore/create flow, not the primary Wallet screen.
 11. In progress: Android biometric unlock is available on the locked screen when the device supports enrolled biometrics.
-12. Remaining: repeat on iOS/Expo Go when iOS testing is available.
-13. Only then harden real test-wallet custody.
+12. In progress: read-only Dashboard scaffold shows mocked helper status, HNS balance, receive address, and owned names.
+13. In progress: receive address can be copied.
+14. In progress: dedicated Domains section lists mock owned names and opens read-only domain detail/actions.
+15. Remaining: repeat on iOS/Expo Go when iOS testing is available.
+16. Only then harden real test-wallet custody.
 
 Run the current wallet-core check:
 
@@ -45,7 +48,7 @@ npm run test:wallet-core
 
 The test fixture uses the public BIP39 `abandon ... about` mnemonic. It is safe for open-source tests because it is public and must never be funded.
 
-The current app can also generate a test mnemonic with Expo Crypto, restore a pasted BIP39 mnemonic in a dedicated restore/create flow, confirm requested backup words, run a first Expo SecureStore save/load/delete spike, and hide wallet test data behind a local PIN lock with biometric unlock where available. After unlock, the app auto-loads the saved test wallet and makes it the primary Wallet screen state. Android restart persistence has been confirmed in Expo Go. Treat this as test-only plumbing, not complete wallet custody.
+The current app can also generate a test mnemonic with Expo Crypto, restore a pasted BIP39 mnemonic in a dedicated restore/create flow, confirm requested backup words, run a first Expo SecureStore save/load/delete spike, hide wallet test data behind a local PIN lock with biometric unlock where available, and show mocked read-only Dashboard/Domains screens. The Dashboard can copy the receive address. Domains lists mocked owned names and opens read-only domain detail/actions. After unlock, the app auto-loads the saved test wallet and makes it the primary Dashboard/Wallet state. Android restart persistence has been confirmed in Expo Go. Treat this as test-only plumbing, not complete wallet custody.
 
 ## Local Setup
 

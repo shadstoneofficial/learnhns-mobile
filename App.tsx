@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import * as Clipboard from 'expo-clipboard';
 import * as Crypto from 'expo-crypto';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
@@ -22,7 +23,25 @@ const publicTestMnemonic = walletCoreTestVectors[0].mnemonic;
 const storedTestWalletKey = 'learnhns.mobile.testWalletMnemonic.v1';
 const storedPinKey = 'learnhns.mobile.testWalletPin.v1';
 const backupChallengeIndices = [2, 6, 10];
-const sections = ['Wallet', 'Backup', 'Storage', 'Security'] as const;
+const sections = ['Dashboard', 'Domains', 'Wallet', 'Backup', 'Storage', 'Security'] as const;
+const mockWalletState = {
+  helperStatus: 'Mock helper online',
+  balance: '0.000000 HNS',
+  names: [
+    {
+      name: 'learnhns/',
+      status: 'Mock owned',
+      renewal: 'No live renewal data yet',
+      records: ['NS ns1.learnhns.com.', 'TXT "mobile dashboard mock"'],
+    },
+    {
+      name: 'mobiletest/',
+      status: 'Mock owned',
+      renewal: 'No live renewal data yet',
+      records: ['A 127.0.0.1', 'TXT "test wallet only"'],
+    },
+  ],
+};
 
 type Section = (typeof sections)[number];
 type WalletFlow = 'main' | 'restore';
@@ -64,10 +83,14 @@ export default function App() {
   const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('Biometric unlock');
   const [lockMessage, setLockMessage] = useState('No app PIN has been set yet.');
-  const [activeSection, setActiveSection] = useState<Section>('Wallet');
+  const [activeSection, setActiveSection] = useState<Section>('Dashboard');
   const [hasSavedWallet, setHasSavedWallet] = useState(false);
   const [isCurrentWalletSaved, setIsCurrentWalletSaved] = useState(false);
   const [walletFlow, setWalletFlow] = useState<WalletFlow>('main');
+  const [clipboardMessage, setClipboardMessage] = useState('Tap receive address to copy.');
+  const [selectedName, setSelectedName] = useState<(typeof mockWalletState.names)[number] | null>(
+    null
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -232,7 +255,7 @@ export default function App() {
     setHasSavedWallet(true);
     setIsCurrentWalletSaved(true);
     setStorageMessage(successMessage);
-    setActiveSection('Wallet');
+    setActiveSection('Dashboard');
     setWalletFlow('main');
     return true;
   }
@@ -328,6 +351,16 @@ export default function App() {
     setPinInput('');
     setUnlockPinInput('');
     setLockMessage('Test PIN deleted.');
+  }
+
+  async function copyReceiveAddress() {
+    if (walletPreview.status !== 'ready') {
+      setClipboardMessage('No receive address is loaded yet.');
+      return;
+    }
+
+    await Clipboard.setStringAsync(walletPreview.address);
+    setClipboardMessage('Receive address copied.');
   }
 
   function deriveWalletPreview(mnemonic: string) {
@@ -497,7 +530,12 @@ export default function App() {
             <Pressable
               accessibilityRole="button"
               key={section}
-              onPress={() => setActiveSection(section)}
+              onPress={() => {
+                setActiveSection(section);
+                if (section !== 'Domains') {
+                  setSelectedName(null);
+                }
+              }}
               style={[
                 styles.sectionTab,
                 activeSection === section && styles.sectionTabActive,
@@ -514,6 +552,132 @@ export default function App() {
             </Pressable>
           ))}
         </View>
+
+        {activeSection === 'Dashboard' && (
+          <View style={styles.panel}>
+            <View style={styles.panelHeader}>
+              <Text style={styles.panelLabel}>M3 read-only state</Text>
+              <Text style={styles.panelTitle}>Wallet dashboard</Text>
+            </View>
+            <Text style={styles.panelCopy}>
+              This is mocked helper data. Live balances, owned names, and renewal
+              status still need a real helper/indexer connection.
+            </Text>
+
+            <View style={styles.dashboardMetric}>
+              <Text style={styles.detailLabel}>Helper status</Text>
+              <Text style={styles.metricValue}>{mockWalletState.helperStatus}</Text>
+            </View>
+
+            <View style={styles.dashboardMetric}>
+              <Text style={styles.detailLabel}>Mock HNS balance</Text>
+              <Text style={styles.balanceValue}>{mockWalletState.balance}</Text>
+            </View>
+
+            {walletPreview.status === 'ready' && (
+              <View style={styles.dashboardMetric}>
+                <Text style={styles.detailLabel}>Receive address</Text>
+                <Pressable accessibilityRole="button" onPress={copyReceiveAddress}>
+                  <Text selectable style={styles.addressText}>
+                    {walletPreview.address}
+                  </Text>
+                </Pressable>
+                <Text style={styles.nameMeta}>{clipboardMessage}</Text>
+              </View>
+            )}
+
+            <View style={styles.dashboardMetric}>
+              <Text style={styles.detailLabel}>Mock owned domains</Text>
+              <Text style={styles.metricValue}>{mockWalletState.names.length} domains</Text>
+              <Text style={styles.nameMeta}>Open Domains to inspect records and actions.</Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setActiveSection('Domains')}
+              style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+            >
+              <Text style={styles.secondaryButtonText}>View Domains</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {activeSection === 'Domains' && (
+          <View style={styles.panel}>
+            {!selectedName ? (
+              <>
+                <View style={styles.panelHeader}>
+                  <Text style={styles.panelLabel}>M5 domains</Text>
+                  <Text style={styles.panelTitle}>Owned domains</Text>
+                </View>
+                <Text style={styles.panelCopy}>
+                  Mock domain list. Live ownership, records, and renewal data will come
+                  from the helper/indexer layer.
+                </Text>
+
+                <View style={styles.namesList}>
+                  {mockWalletState.names.map((name) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={name.name}
+                      onPress={() => setSelectedName(name)}
+                      style={({ pressed }) => [styles.nameRow, pressed && styles.buttonPressed]}
+                    >
+                      <Text style={styles.nameText}>{name.name}</Text>
+                      <Text style={styles.nameMeta}>{name.status}</Text>
+                      <Text style={styles.nameMeta}>{name.renewal}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.panelHeader}>
+                  <Text style={styles.panelLabel}>Mock domain manager</Text>
+                  <Text style={styles.panelTitle}>{selectedName.name}</Text>
+                </View>
+                <Text style={styles.panelCopy}>
+                  Read-only mock detail. Record editing, renewals, and transfer actions
+                  require live helper data and signing flows.
+                </Text>
+
+                <View style={styles.namesList}>
+                  <Text style={styles.detailLabel}>Resource records</Text>
+                  {selectedName.records.map((record) => (
+                    <View key={record} style={styles.recordRow}>
+                      <Text style={styles.recordText}>{record}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.storageActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled
+                    style={[styles.secondaryButton, styles.storageButton, styles.buttonDisabled]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Edit Records</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled
+                    style={[styles.secondaryButton, styles.storageButton, styles.buttonDisabled]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Renew</Text>
+                  </Pressable>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setSelectedName(null)}
+                  style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.secondaryButtonText}>Back To Domains</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        )}
 
         {activeSection === 'Wallet' && (
         <View style={styles.panel}>
@@ -953,13 +1117,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8eef8',
     borderRadius: 8,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 4,
     padding: 4,
   },
   sectionTab: {
     alignItems: 'center',
     borderRadius: 7,
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '30%',
     minHeight: 40,
     justifyContent: 'center',
     paddingHorizontal: 4,
@@ -1123,6 +1289,63 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 10,
     padding: 16,
+  },
+  dashboardMetric: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 5,
+    padding: 12,
+  },
+  metricValue: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  balanceValue: {
+    color: '#102a56',
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  namesList: {
+    gap: 8,
+  },
+  nameRow: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 3,
+    padding: 12,
+  },
+  nameText: {
+    color: '#0f172a',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  nameMeta: {
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  nameDetailPanel: {
+    backgroundColor: '#ffffff',
+    borderColor: '#c9d8f5',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+    padding: 14,
+  },
+  recordRow: {
+    backgroundColor: '#eef3fb',
+    borderRadius: 8,
+    padding: 10,
+  },
+  recordText: {
+    color: '#183526',
+    fontSize: 13,
+    lineHeight: 18,
   },
   addressText: {
     color: '#0f172a',
