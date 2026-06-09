@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as Crypto from 'expo-crypto';
+import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -60,6 +61,8 @@ export default function App() {
   const [isLocked, setIsLocked] = useState(false);
   const [isCheckingLock, setIsCheckingLock] = useState(true);
   const [isHydratingWallet, setIsHydratingWallet] = useState(false);
+  const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState('Biometric unlock');
   const [lockMessage, setLockMessage] = useState('No app PIN has been set yet.');
   const [activeSection, setActiveSection] = useState<Section>('Wallet');
   const [hasSavedWallet, setHasSavedWallet] = useState(false);
@@ -70,6 +73,15 @@ export default function App() {
     let isMounted = true;
 
     async function loadPinState() {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      const authTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
+
+      if (isMounted && hasHardware && isEnrolled) {
+        setIsBiometricAvailable(true);
+        setBiometricLabel(getBiometricLabel(authTypes));
+      }
+
       const storedPin = await SecureStore.getItemAsync(storedPinKey);
 
       if (!isMounted) {
@@ -276,6 +288,29 @@ export default function App() {
     }
   }
 
+  async function unlockWithBiometrics() {
+    const result = await LocalAuthentication.authenticateAsync({
+      cancelLabel: 'Use PIN',
+      disableDeviceFallback: false,
+      promptMessage: 'Unlock LearnHNS Mobile',
+    });
+
+    if (!result.success) {
+      setLockMessage('Biometric unlock was cancelled or did not match.');
+      return;
+    }
+
+    setIsLocked(false);
+    setLockMessage('Unlocked with biometrics.');
+    setIsHydratingWallet(true);
+
+    try {
+      await hydrateSavedTestWallet('Unlocked with biometrics and loaded saved test seed.');
+    } finally {
+      setIsHydratingWallet(false);
+    }
+  }
+
   function lockApp() {
     if (!hasPin) {
       setLockMessage('Set a test PIN before locking the app.');
@@ -413,6 +448,15 @@ export default function App() {
               style={styles.challengeInput}
               value={unlockPinInput}
             />
+            {isBiometricAvailable && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={unlockWithBiometrics}
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.secondaryButtonText}>Unlock With {biometricLabel}</Text>
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               onPress={unlockWithPin}
@@ -767,6 +811,11 @@ export default function App() {
             This hides wallet test data behind a local PIN. The PIN storage model is
             still a prototype and must be hardened before real wallet use.
           </Text>
+          <Text style={styles.storageMessage}>
+            {isBiometricAvailable
+              ? `${biometricLabel} unlock is available on this device.`
+              : 'Biometric unlock is not available or not enrolled on this device.'}
+          </Text>
 
           <TextInput
             keyboardType="number-pad"
@@ -827,6 +876,18 @@ export default function App() {
 
 function normalizeMnemonic(mnemonic: string) {
   return mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function getBiometricLabel(types: LocalAuthentication.AuthenticationType[]) {
+  if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+    return 'Face';
+  }
+
+  if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+    return 'Fingerprint';
+  }
+
+  return 'Biometrics';
 }
 
 const styles = StyleSheet.create({
