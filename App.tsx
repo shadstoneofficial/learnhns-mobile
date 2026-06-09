@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
@@ -19,6 +19,12 @@ import { walletCoreTestVectors } from './src/wallet-core/testVectors';
 
 const publicTestMnemonic = walletCoreTestVectors[0].mnemonic;
 const storedTestWalletKey = 'learnhns.mobile.testWalletMnemonic.v1';
+const storedPinKey = 'learnhns.mobile.testWalletPin.v1';
+const backupChallengeIndices = [2, 6, 10];
+const sections = ['Wallet', 'Backup', 'Storage', 'Security'] as const;
+
+type Section = (typeof sections)[number];
+type WalletFlow = 'main' | 'restore';
 
 type WalletPreview =
   | {
@@ -43,10 +49,76 @@ export default function App() {
   const [storageMessage, setStorageMessage] = useState(
     'No seed has been saved in this session.'
   );
+  const [backupInputs, setBackupInputs] = useState<Record<number, string>>({});
+  const [backupConfirmedMnemonic, setBackupConfirmedMnemonic] = useState('');
+  const [backupMessage, setBackupMessage] = useState(
+    'Confirm the requested seed words before saving this test wallet.'
+  );
+  const [pinInput, setPinInput] = useState('');
+  const [unlockPinInput, setUnlockPinInput] = useState('');
+  const [hasPin, setHasPin] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [isCheckingLock, setIsCheckingLock] = useState(true);
+  const [isHydratingWallet, setIsHydratingWallet] = useState(false);
+  const [lockMessage, setLockMessage] = useState('No app PIN has been set yet.');
+  const [activeSection, setActiveSection] = useState<Section>('Wallet');
+  const [hasSavedWallet, setHasSavedWallet] = useState(false);
+  const [isCurrentWalletSaved, setIsCurrentWalletSaved] = useState(false);
+  const [walletFlow, setWalletFlow] = useState<WalletFlow>('main');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadPinState() {
+      const storedPin = await SecureStore.getItemAsync(storedPinKey);
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (!storedPin) {
+        setIsHydratingWallet(true);
+        try {
+          await hydrateSavedTestWallet('Loaded saved test seed from SecureStore.');
+        } finally {
+          setIsHydratingWallet(false);
+        }
+        setIsCheckingLock(false);
+        return;
+      }
+
+      setHasPin(true);
+      setIsLocked(true);
+      setLockMessage('App locked. Enter your test PIN to continue.');
+      setIsCheckingLock(false);
+    }
+
+    loadPinState().catch(() => {
+      if (isMounted) {
+        setLockMessage('Unable to read test PIN state.');
+        setIsCheckingLock(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const wordCount = useMemo(() => {
     return normalizeMnemonic(mnemonicInput).split(' ').filter(Boolean).length;
   }, [mnemonicInput]);
+  const mnemonicWords = useMemo(() => {
+    return normalizeMnemonic(mnemonicInput).split(' ').filter(Boolean);
+  }, [mnemonicInput]);
+  const backupChallenge = useMemo(() => {
+    if (mnemonicWords.length < 12) {
+      return [];
+    }
+
+    return backupChallengeIndices.filter((index) => index < mnemonicWords.length);
+  }, [mnemonicWords.length]);
+  const isBackupConfirmed = backupConfirmedMnemonic === normalizeMnemonic(mnemonicInput);
 
   async function createTestWallet() {
     setIsGenerating(true);
@@ -56,7 +128,11 @@ export default function App() {
       const mnemonic = entropyToMnemonic(entropy, wordlist);
 
       setMnemonicInput(mnemonic);
+      setIsCurrentWalletSaved(false);
+      resetBackupConfirmation();
       deriveWalletPreview(mnemonic);
+      setActiveSection('Backup');
+      setWalletFlow('main');
     } catch (error) {
       setWalletPreview({
         status: 'error',
@@ -68,17 +144,26 @@ export default function App() {
   }
 
   function restoreWallet() {
+    setIsCurrentWalletSaved(false);
     deriveWalletPreview(mnemonicInput);
+    setActiveSection('Backup');
+    setWalletFlow('main');
   }
 
   function loadPublicFixture() {
     setMnemonicInput(publicTestMnemonic);
+    setIsCurrentWalletSaved(false);
+    resetBackupConfirmation();
     deriveWalletPreview(publicTestMnemonic);
+    setActiveSection('Backup');
+    setWalletFlow('main');
   }
 
   function clearWallet() {
     setMnemonicInput('');
     setWalletPreview({ status: 'empty' });
+    setIsCurrentWalletSaved(false);
+    resetBackupConfirmation();
   }
 
   async function saveTestWallet() {
@@ -86,8 +171,16 @@ export default function App() {
 
     try {
       deriveReceiveAddress({ mnemonic });
+
+      if (backupConfirmedMnemonic !== mnemonic) {
+        setStorageMessage('Confirm the backup words before saving this test seed.');
+        return;
+      }
+
       setIsStorageBusy(true);
       await SecureStore.setItemAsync(storedTestWalletKey, mnemonic);
+      setHasSavedWallet(true);
+      setIsCurrentWalletSaved(true);
       setStorageMessage('Saved this test seed with Expo SecureStore.');
     } catch (error) {
       setStorageMessage(
@@ -102,16 +195,7 @@ export default function App() {
     setIsStorageBusy(true);
 
     try {
-      const mnemonic = await SecureStore.getItemAsync(storedTestWalletKey);
-
-      if (!mnemonic) {
-        setStorageMessage('No saved test seed found on this device.');
-        return;
-      }
-
-      setMnemonicInput(mnemonic);
-      deriveWalletPreview(mnemonic);
-      setStorageMessage('Loaded saved test seed from SecureStore.');
+      await hydrateSavedTestWallet('Loaded saved test seed from SecureStore.');
     } catch (error) {
       setStorageMessage(
         error instanceof Error ? error.message : 'Unable to load saved test seed.'
@@ -121,11 +205,33 @@ export default function App() {
     }
   }
 
+  async function hydrateSavedTestWallet(successMessage: string) {
+    const mnemonic = await SecureStore.getItemAsync(storedTestWalletKey);
+
+    if (!mnemonic) {
+      setHasSavedWallet(false);
+      setStorageMessage('No saved test seed found on this device.');
+      return false;
+    }
+
+    setMnemonicInput(mnemonic);
+    resetBackupConfirmation();
+    deriveWalletPreview(mnemonic);
+    setHasSavedWallet(true);
+    setIsCurrentWalletSaved(true);
+    setStorageMessage(successMessage);
+    setActiveSection('Wallet');
+    setWalletFlow('main');
+    return true;
+  }
+
   async function deleteSavedTestWallet() {
     setIsStorageBusy(true);
 
     try {
       await SecureStore.deleteItemAsync(storedTestWalletKey);
+      setHasSavedWallet(false);
+      setIsCurrentWalletSaved(false);
       setStorageMessage('Deleted saved test seed from SecureStore.');
     } catch (error) {
       setStorageMessage(
@@ -134,6 +240,59 @@ export default function App() {
     } finally {
       setIsStorageBusy(false);
     }
+  }
+
+  async function setTestPin() {
+    const pin = pinInput.trim();
+
+    if (!/^\d{4,8}$/.test(pin)) {
+      setLockMessage('Use a numeric PIN with 4 to 8 digits.');
+      return;
+    }
+
+    await SecureStore.setItemAsync(storedPinKey, pin);
+    setHasPin(true);
+    setPinInput('');
+    setLockMessage('Test PIN saved. You can now lock the app.');
+  }
+
+  async function unlockWithPin() {
+    const storedPin = await SecureStore.getItemAsync(storedPinKey);
+
+    if (!storedPin || unlockPinInput.trim() !== storedPin) {
+      setLockMessage('PIN did not match.');
+      return;
+    }
+
+    setIsLocked(false);
+    setUnlockPinInput('');
+    setLockMessage('Unlocked.');
+    setIsHydratingWallet(true);
+
+    try {
+      await hydrateSavedTestWallet('Unlocked and loaded saved test seed from SecureStore.');
+    } finally {
+      setIsHydratingWallet(false);
+    }
+  }
+
+  function lockApp() {
+    if (!hasPin) {
+      setLockMessage('Set a test PIN before locking the app.');
+      return;
+    }
+
+    setIsLocked(true);
+    setLockMessage('App locked. Enter your test PIN to continue.');
+  }
+
+  async function clearTestPin() {
+    await SecureStore.deleteItemAsync(storedPinKey);
+    setHasPin(false);
+    setIsLocked(false);
+    setPinInput('');
+    setUnlockPinInput('');
+    setLockMessage('Test PIN deleted.');
   }
 
   function deriveWalletPreview(mnemonic: string) {
@@ -155,6 +314,119 @@ export default function App() {
     }
   }
 
+  function updateMnemonicInput(value: string) {
+    setMnemonicInput(value);
+    setIsCurrentWalletSaved(false);
+    resetBackupConfirmation();
+  }
+
+  function updateBackupInput(index: number, value: string) {
+    setBackupInputs((current) => ({
+      ...current,
+      [index]: value.trim().toLowerCase(),
+    }));
+  }
+
+  function confirmBackupWords() {
+    const mnemonic = normalizeMnemonic(mnemonicInput);
+
+    try {
+      deriveReceiveAddress({ mnemonic });
+    } catch (error) {
+      setBackupMessage(
+        error instanceof Error ? error.message : 'Enter a valid seed phrase first.'
+      );
+      return;
+    }
+
+    const words = mnemonic.split(' ');
+    const allMatch = backupChallenge.every((index) => {
+      return backupInputs[index] === words[index];
+    });
+
+    if (!allMatch) {
+      setBackupConfirmedMnemonic('');
+      setBackupMessage('One or more backup words did not match. Check the phrase and try again.');
+      return;
+    }
+
+    setBackupConfirmedMnemonic(mnemonic);
+    setBackupMessage('Backup words confirmed. This test seed can now be saved locally.');
+  }
+
+  function resetBackupConfirmation() {
+    setBackupInputs({});
+    setBackupConfirmedMnemonic('');
+    setBackupMessage('Confirm the requested seed words before saving this test wallet.');
+  }
+
+  if (isCheckingLock) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="auto" />
+        <View style={styles.lockContainer}>
+          <ActivityIndicator color="#2856a3" />
+          <Text style={styles.storageMessage}>Checking wallet lock...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isHydratingWallet) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="auto" />
+        <View style={styles.lockContainer}>
+          <ActivityIndicator color="#2856a3" />
+          <Text style={styles.storageMessage}>Loading saved wallet...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isLocked) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="auto" />
+        <View style={styles.lockContainer}>
+          <View style={styles.header}>
+            <Text style={styles.eyebrow}>LearnHNS Mobile</Text>
+            <Text style={styles.title}>Wallet locked.</Text>
+            <Text style={styles.subtitle}>
+              This Android-first PIN gate hides wallet test data until unlock.
+              Biometric unlock comes after this.
+            </Text>
+          </View>
+
+          <View style={styles.panel}>
+            <View style={styles.panelHeader}>
+              <Text style={styles.panelLabel}>M2 app lock</Text>
+              <Text style={styles.panelTitle}>Enter test PIN</Text>
+            </View>
+            <TextInput
+              keyboardType="number-pad"
+              maxLength={8}
+              onChangeText={setUnlockPinInput}
+              placeholder="PIN"
+              placeholderTextColor="#94a3b8"
+              secureTextEntry
+              style={styles.challengeInput}
+              value={unlockPinInput}
+            />
+            <Pressable
+              accessibilityRole="button"
+              onPress={unlockWithPin}
+              style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
+            >
+              <Text style={styles.primaryButtonText}>Unlock</Text>
+            </Pressable>
+            <Text style={styles.storageMessage}>{lockMessage}</Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="auto" />
@@ -164,7 +436,7 @@ export default function App() {
           <Text style={styles.title}>Create or restore a Handshake wallet.</Text>
           <Text style={styles.subtitle}>
             Android-first development is moving ahead with in-memory wallet checks.
-            Seed storage is intentionally disabled until encrypted custody is proven.
+            Seed storage is gated behind backup confirmation while custody is proven.
           </Text>
         </View>
 
@@ -176,40 +448,71 @@ export default function App() {
           </Text>
         </View>
 
+        <View style={styles.sectionTabs}>
+          {sections.map((section) => (
+            <Pressable
+              accessibilityRole="button"
+              key={section}
+              onPress={() => setActiveSection(section)}
+              style={[
+                styles.sectionTab,
+                activeSection === section && styles.sectionTabActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.sectionTabText,
+                  activeSection === section && styles.sectionTabTextActive,
+                ]}
+              >
+                {section}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {activeSection === 'Wallet' && (
         <View style={styles.panel}>
           <View style={styles.panelHeader}>
             <Text style={styles.panelLabel}>M1/M2 bridge</Text>
-            <Text style={styles.panelTitle}>Wallet seed preview</Text>
+            <Text style={styles.panelTitle}>
+              {walletFlow === 'restore'
+                ? 'Restore or create test wallet'
+                : isCurrentWalletSaved
+                  ? 'Saved test wallet'
+                  : 'Wallet seed preview'}
+            </Text>
           </View>
 
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={isGenerating}
-              onPress={createTestWallet}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && styles.buttonPressed,
-                isGenerating && styles.buttonDisabled,
-              ]}
-            >
-              {isGenerating ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Create Test Wallet</Text>
+          {walletFlow === 'main' && (
+            <>
+              <Text style={styles.panelCopy}>
+                {isCurrentWalletSaved
+                  ? 'This device has a saved test wallet. New wallet creation is available as a secondary action.'
+                  : hasSavedWallet
+                    ? 'A saved test wallet exists on this device. Use Storage to load it, or restore/create another test wallet.'
+                    : 'Create or restore a test wallet to derive its first Handshake receive address.'}
+              </Text>
+
+              {isCurrentWalletSaved && walletPreview.status === 'ready' && (
+            <View style={styles.resultPanel}>
+              <Text style={styles.panelLabel}>Current receive address</Text>
+              <Text selectable style={styles.addressText}>
+                {walletPreview.address}
+              </Text>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Path</Text>
+                <Text selectable style={styles.detailValue}>
+                  {walletPreview.path}
+                </Text>
+              </View>
+              <Text style={styles.resultNote}>
+                Loaded from local SecureStore. Balance and names are not connected yet.
+              </Text>
+            </View>
               )}
-            </Pressable>
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={loadPublicFixture}
-              style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
-            >
-              <Text style={styles.secondaryButtonText}>Load Public Fixture</Text>
-            </Pressable>
-          </View>
-
-          {walletPreview.status === 'ready' && (
+              {!isCurrentWalletSaved && walletPreview.status === 'ready' && (
             <View style={styles.resultPanel}>
               <Text style={styles.panelLabel}>Derived receive address</Text>
               <Text selectable style={styles.addressText}>
@@ -226,45 +529,176 @@ export default function App() {
                 the next custody gate.
               </Text>
             </View>
+              )}
+
+              {walletPreview.status === 'error' && (
+                <View style={styles.errorPanel}>
+                  <Text style={styles.errorTitle}>Seed phrase not valid</Text>
+                  <Text style={styles.errorText}>{walletPreview.message}</Text>
+                </View>
+              )}
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setWalletFlow('restore')}
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {isCurrentWalletSaved ? 'Restore Or Create Another Wallet' : 'Create Or Restore Wallet'}
+                </Text>
+              </Pressable>
+            </>
           )}
 
-          {walletPreview.status === 'error' && (
-            <View style={styles.errorPanel}>
-              <Text style={styles.errorTitle}>Seed phrase not valid</Text>
-              <Text style={styles.errorText}>{walletPreview.message}</Text>
-            </View>
+          {walletFlow === 'restore' && (
+            <>
+              <Text style={styles.panelCopy}>
+                Seed phrases are only shown inside this restore/create flow. Return to Wallet
+                when you are done.
+              </Text>
+
+              <Text style={styles.inputLabel}>Seed phrase</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                multiline
+                onChangeText={updateMnemonicInput}
+                placeholder="Enter a 12 or 24 word BIP39 seed phrase"
+                placeholderTextColor="#94a3b8"
+                scrollEnabled
+                spellCheck={false}
+                style={styles.mnemonicInput}
+                textAlignVertical="top"
+                value={mnemonicInput}
+              />
+
+              <View style={styles.inputFooter}>
+                <Text style={styles.wordCount}>{wordCount} words</Text>
+                <Pressable accessibilityRole="button" onPress={clearWallet}>
+                  <Text style={styles.clearButton}>Clear</Text>
+                </Pressable>
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={restoreWallet}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.primaryButtonText}>Restore And Derive Address</Text>
+              </Pressable>
+
+              <View style={styles.actions}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={isGenerating}
+                  onPress={createTestWallet}
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    pressed && styles.buttonPressed,
+                    isGenerating && styles.buttonDisabled,
+                  ]}
+                >
+                  {isGenerating ? (
+                    <ActivityIndicator color="#244b8f" />
+                  ) : (
+                    <Text style={styles.secondaryButtonText}>Create Test Wallet</Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={loadPublicFixture}
+                  style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+                >
+                  <Text style={styles.secondaryButtonText}>Load Public Fixture</Text>
+                </Pressable>
+              </View>
+
+              {!isCurrentWalletSaved && walletPreview.status === 'ready' && (
+                <View style={styles.resultPanel}>
+                  <Text style={styles.panelLabel}>Derived receive address</Text>
+                  <Text selectable style={styles.addressText}>
+                    {walletPreview.address}
+                  </Text>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Path</Text>
+                    <Text selectable style={styles.detailValue}>
+                      {walletPreview.path}
+                    </Text>
+                  </View>
+                  <Text style={styles.resultNote}>
+                    Continue to Backup before saving this test wallet locally.
+                  </Text>
+                </View>
+              )}
+
+              {walletPreview.status === 'error' && (
+                <View style={styles.errorPanel}>
+                  <Text style={styles.errorTitle}>Seed phrase not valid</Text>
+                  <Text style={styles.errorText}>{walletPreview.message}</Text>
+                </View>
+              )}
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setWalletFlow('main')}
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+              >
+                <Text style={styles.secondaryButtonText}>Back To Wallet</Text>
+              </Pressable>
+            </>
           )}
+        </View>
+        )}
 
-          <Text style={styles.inputLabel}>Seed phrase</Text>
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            multiline
-            onChangeText={setMnemonicInput}
-            placeholder="Enter a 12 or 24 word BIP39 seed phrase"
-            placeholderTextColor="#94a3b8"
-            spellCheck={false}
-            style={styles.mnemonicInput}
-            textAlignVertical="top"
-            value={mnemonicInput}
-          />
-
-          <View style={styles.inputFooter}>
-            <Text style={styles.wordCount}>{wordCount} words</Text>
-            <Pressable accessibilityRole="button" onPress={clearWallet}>
-              <Text style={styles.clearButton}>Clear</Text>
-            </Pressable>
+        {activeSection === 'Backup' && (
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelLabel}>M2 backup gate</Text>
+            <Text style={styles.panelTitle}>Confirm seed backup</Text>
           </View>
+          <Text style={styles.panelCopy}>
+            Enter the requested words from the seed phrase before saving it locally.
+          </Text>
+
+          {backupChallenge.map((index) => (
+            <View key={index} style={styles.challengeRow}>
+              <Text style={styles.challengeLabel}>Word {index + 1}</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                onChangeText={(value) => updateBackupInput(index, value)}
+                placeholder={`Enter word ${index + 1}`}
+                placeholderTextColor="#94a3b8"
+                spellCheck={false}
+                style={styles.challengeInput}
+                value={backupInputs[index] ?? ''}
+              />
+            </View>
+          ))}
 
           <Pressable
             accessibilityRole="button"
-            onPress={restoreWallet}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
+            disabled={backupChallenge.length === 0}
+            onPress={confirmBackupWords}
+            style={({ pressed }) => [
+              isBackupConfirmed ? styles.confirmedButton : styles.primaryButton,
+              pressed && styles.buttonPressed,
+              backupChallenge.length === 0 && styles.buttonDisabled,
+            ]}
           >
-            <Text style={styles.primaryButtonText}>Restore And Derive Address</Text>
+            <Text style={styles.primaryButtonText}>
+              {isBackupConfirmed ? 'Backup Confirmed' : 'Confirm Backup Words'}
+            </Text>
           </Pressable>
-        </View>
 
+          <Text style={isBackupConfirmed ? styles.successMessage : styles.storageMessage}>
+            {backupMessage}
+          </Text>
+        </View>
+        )}
+
+        {activeSection === 'Storage' && (
         <View style={styles.panel}>
           <View style={styles.panelHeader}>
             <Text style={styles.panelLabel}>M2 storage spike</Text>
@@ -272,17 +706,18 @@ export default function App() {
           </View>
           <Text style={styles.panelCopy}>
             This proves Android secure storage plumbing only. PIN, biometric unlock,
-            backup confirmation, and real-wallet safety are still not complete.
+            and real-wallet safety are still not complete.
           </Text>
 
           <Pressable
             accessibilityRole="button"
-            disabled={isStorageBusy || !mnemonicInput.trim()}
+            disabled={isStorageBusy || !mnemonicInput.trim() || !isBackupConfirmed}
             onPress={saveTestWallet}
             style={({ pressed }) => [
               styles.primaryButton,
               pressed && styles.buttonPressed,
-              (isStorageBusy || !mnemonicInput.trim()) && styles.buttonDisabled,
+              (isStorageBusy || !mnemonicInput.trim() || !isBackupConfirmed) &&
+                styles.buttonDisabled,
             ]}
           >
             <Text style={styles.primaryButtonText}>Save Test Seed Locally</Text>
@@ -320,6 +755,71 @@ export default function App() {
 
           <Text style={styles.storageMessage}>{storageMessage}</Text>
         </View>
+        )}
+
+        {activeSection === 'Security' && (
+        <View style={styles.panel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelLabel}>M2 app lock</Text>
+            <Text style={styles.panelTitle}>Protect with test PIN</Text>
+          </View>
+          <Text style={styles.panelCopy}>
+            This hides wallet test data behind a local PIN. The PIN storage model is
+            still a prototype and must be hardened before real wallet use.
+          </Text>
+
+          <TextInput
+            keyboardType="number-pad"
+            maxLength={8}
+            onChangeText={setPinInput}
+            placeholder="Set 4 to 8 digit PIN"
+            placeholderTextColor="#94a3b8"
+            secureTextEntry
+            style={styles.challengeInput}
+            value={pinInput}
+          />
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={setTestPin}
+            style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
+          >
+            <Text style={styles.primaryButtonText}>{hasPin ? 'Update Test PIN' : 'Set Test PIN'}</Text>
+          </Pressable>
+
+          <View style={styles.storageActions}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!hasPin}
+              onPress={lockApp}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                styles.storageButton,
+                pressed && styles.buttonPressed,
+                !hasPin && styles.buttonDisabled,
+              ]}
+            >
+              <Text style={styles.secondaryButtonText}>Lock App</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={!hasPin}
+              onPress={clearTestPin}
+              style={({ pressed }) => [
+                styles.destructiveButton,
+                styles.storageButton,
+                pressed && styles.buttonPressed,
+                !hasPin && styles.buttonDisabled,
+              ]}
+            >
+              <Text style={styles.destructiveButtonText}>Delete PIN</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.storageMessage}>{lockMessage}</Text>
+        </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -337,7 +837,13 @@ const styles = StyleSheet.create({
   container: {
     gap: 18,
     padding: 20,
-    paddingBottom: 96,
+    paddingBottom: 180,
+  },
+  lockContainer: {
+    flex: 1,
+    gap: 18,
+    justifyContent: 'center',
+    padding: 20,
   },
   header: {
     gap: 10,
@@ -382,6 +888,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  sectionTabs: {
+    backgroundColor: '#e8eef8',
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 4,
+    padding: 4,
+  },
+  sectionTab: {
+    alignItems: 'center',
+    borderRadius: 7,
+    flex: 1,
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  sectionTabActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+  },
+  sectionTabText: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  sectionTabTextActive: {
+    color: '#1d4f99',
+  },
   panel: {
     backgroundColor: '#ffffff',
     borderColor: '#d8e2f3',
@@ -417,6 +952,14 @@ const styles = StyleSheet.create({
   primaryButton: {
     alignItems: 'center',
     backgroundColor: '#2856a3',
+    borderRadius: 8,
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  confirmedButton: {
+    alignItems: 'center',
+    backgroundColor: '#18794e',
     borderRadius: 8,
     minHeight: 48,
     justifyContent: 'center',
@@ -476,13 +1019,32 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontSize: 15,
     lineHeight: 22,
-    minHeight: 116,
+    maxHeight: 140,
+    minHeight: 92,
     padding: 12,
   },
   inputFooter: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  challengeRow: {
+    gap: 6,
+  },
+  challengeLabel: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  challengeInput: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#dbe3ee',
+    borderRadius: 8,
+    borderWidth: 1,
+    color: '#0f172a',
+    fontSize: 15,
+    minHeight: 46,
+    paddingHorizontal: 12,
   },
   wordCount: {
     color: '#64748b',
@@ -552,6 +1114,12 @@ const styles = StyleSheet.create({
   storageMessage: {
     color: '#64748b',
     fontSize: 13,
+    lineHeight: 19,
+  },
+  successMessage: {
+    color: '#18794e',
+    fontSize: 13,
+    fontWeight: '700',
     lineHeight: 19,
   },
 });

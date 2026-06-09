@@ -28,8 +28,13 @@ The first real engineering gate is wallet-core feasibility:
 3. Done on Android/Expo Go: confirm the same derivation runs inside a mobile app runtime.
 4. In progress: create/restore wallet preview derives the first receive address in memory.
 5. Done on Android/Expo Go: SecureStore can save/load/delete the current test mnemonic and restore it after force-closing Expo Go.
-6. Remaining: repeat on iOS/Expo Go when iOS testing is available.
-7. Only then add PIN, biometric unlock, backup confirmation, and real test-wallet custody.
+6. In progress: backup phrase confirmation gates saving new test seeds.
+7. In progress: Android PIN lock prototype can hide wallet test data after launch/lock and auto-load the saved test wallet after unlock.
+8. In progress: prototype flow is split into Wallet, Backup, Storage, and Security screens.
+9. In progress: saved-wallet state is primary on the Wallet screen; create/restore is secondary after a wallet exists.
+10. In progress: seed phrase entry is kept inside a dedicated restore/create flow, not the primary Wallet screen.
+11. Remaining: repeat on iOS/Expo Go when iOS testing is available.
+12. Only then add biometric unlock and real test-wallet custody.
 
 Run the current wallet-core check:
 
@@ -39,7 +44,7 @@ npm run test:wallet-core
 
 The test fixture uses the public BIP39 `abandon ... about` mnemonic. It is safe for open-source tests because it is public and must never be funded.
 
-The current app can also generate a test mnemonic with Expo Crypto, restore a pasted BIP39 mnemonic, and run a first Expo SecureStore save/load/delete spike. Android restart persistence has been confirmed in Expo Go. Treat this as test-only plumbing, not complete wallet custody.
+The current app can also generate a test mnemonic with Expo Crypto, restore a pasted BIP39 mnemonic in a dedicated restore/create flow, confirm requested backup words, run a first Expo SecureStore save/load/delete spike, and hide wallet test data behind a local PIN lock. After PIN unlock, the app auto-loads the saved test wallet and makes it the primary Wallet screen state. Android restart persistence has been confirmed in Expo Go. Treat this as test-only plumbing, not complete wallet custody.
 
 ## Local Setup
 
